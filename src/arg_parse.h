@@ -4,7 +4,7 @@
 #include <argp.h>
 
 
-/*this struct hold the input value for triggerd options*/
+// This struct hold the input value for triggerd options
 typedef struct _arguments
 {
   char* input_path;

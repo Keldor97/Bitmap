@@ -47,7 +47,7 @@ error_t parse_option(int key, char *arg, struct argp_state *state)
 
 
     case ARGP_KEY_END:
-      //checks for Path and the triggerd option
+      // Checks for Path and the triggerd option
       if(state->arg_num == 1)
         //TODO
       break;

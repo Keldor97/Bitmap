@@ -27,6 +27,14 @@ double max_d(double a, double b)
 	return (a > b) ? a : b;
 }
 
+void print_red(const char* input)
+{
+	printf("\033[1;31m");
+	printf("%s\n",input);
+	printf("\033[0m");
+}
+
+
 /*
 bitmap_component_t bin(bitmap_component_t val, int bin_count)
 {
@@ -111,6 +119,37 @@ void manipulate(bitmap_pixel_rgb_t* pixels, int count)
 }
 
 
+// Get value from brightness option and return a valid value
+int get_brightness(struct _arguments *arguments)
+{
+	if(arguments->brightness_adjust != 0x0)
+	{
+		// Compare string length with position of non numeric value
+		if(strlen(arguments->brightness_adjust) != strspn(arguments->brightness_adjust, "0123456789-+"))
+		{
+			print_red("No valid digit!");
+			exit(-1);
+		}
+
+
+
+		int brightness_value = atoi(arguments->brightness_adjust);
+		printf("Value: %d\n",brightness_value);
+
+		// Checks the brightness range
+		if(brightness_value < -100 || brightness_value > 100 )
+		{
+			print_red("Brightness must be -100 to 100!");
+			exit(-1);
+		}
+
+		return brightness_value;
+	}
+
+
+}
+
+
 int main(int argc, char** argv)
 {
 
@@ -142,6 +181,21 @@ int main(int argc, char** argv)
 
 
 
+
+
+
+
+	int brightness = get_brightness(&arguments);
+
+
+	// Checks for output sets by user
+	if(arguments.output == 0x0)
+	{
+		arguments.output = strtok(arguments.input_path, ".");
+		arguments.output = strcat(arguments.output, "_changed.bmp"); //TODO: dark , light depends -b '+' or -b '-'
+	}
+
+
 	//Write bitmap pixels:
 	bitmap_parameters_t parameters =
 	{
@@ -155,38 +209,6 @@ int main(int argc, char** argv)
 		.colorSpace = BITMAP_COLOR_SPACE_RGB
 
 	};
-
-	if(arguments.brightness_adjust != 0x0)
-	{
-		// Compare string length with position of non numeric value
-		if(strlen(arguments.brightness_adjust) != strspn(arguments.brightness_adjust, "0123456789-+"))
-		{
-			printf("No valid digit!\n");
-			exit(-1);
-		}
-
-
-
-		int brightness_value = atoi(arguments.brightness_adjust);
-		printf("Value: %d\n",brightness_value);
-
-		// Checks the brightness range
-		if(brightness_value < -100 || brightness_value > 100 )
-		{
-
-			printf("Brightness must be -100 to 100!\n");
-			exit(-1);
-		}
-
-
-	}
-
-	// Checks for output sets by user
-	if(arguments.output == 0x0)
-	{
-		arguments.output = strtok(arguments.input_path, ".");
-		arguments.output = strcat(arguments.output, "_darker.bmp"); //TODO: dark , light depends -b '+' or -b '-'
-	}
 
 
 	error = bitmapWritePixels(arguments.output,BITMAP_BOOL_TRUE, &parameters, (bitmap_pixel_t*)pixels);
