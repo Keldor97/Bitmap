@@ -17,15 +17,7 @@ int max(int a, int b)
 	return (a > b) ? a : b;
 }
 
-double min_d(double a, double b)
-{
-	return (a < b) ? a : b;
-}
 
-double max_d(double a, double b)
-{
-	return (a > b) ? a : b;
-}
 
 void print_red(const char* input)
 {
@@ -35,84 +27,15 @@ void print_red(const char* input)
 }
 
 
-/*
-bitmap_component_t bin(bitmap_component_t val, int bin_count)
-{
-	double binned (round((double)val / bin_count) * bin_count);
-	return (bitmap_component_t)max(0.0, min(binned, 255.0));
-}
-*/
 
-/*
-void greyscale(bitmap_pixel_rgb_t* pixels, int count)
+void brightness_change(bitmap_pixel_hsv_t* pixels, int count, int brightness)
 {
-	float value;
+
 	for(int i = 0; i < count; i += 1)
 	{
-		bitmap_pixel_rgb_t* pixel = &pixels[i];
-		value = 0.0f;
-		value = 0.3f*pixel->r + 0.59f*pixel->g + 0.11f*pixel->b;
+		bitmap_pixel_hsv_t* pixel = &pixels[i];
 
-			pixel->r = value;
-			pixel->g= value;
-			pixel->b = value;
-
-	}
-
-
-}
-*/
-
-/*
-void tontrennung(bitmap_pixel_rgb_t* pixels, int count)
-{
-	float value;
-	for(int i = 0; i < count; i += 1)
-	{
-		bitmap_pixel_rgb_t* pixel = &pixels[i];
-
-		bitmap_component_t pix = (bitmap_component_t)round((double)pixel->r + (double)pixel->g + (double)pixel->b) / 3.0f);
-
-		pix = bin(pix, 150);
-
-		pixel->r = pix;
-		pixel->g = pix;
-		pixel->b = pix;
-
-
-		//value = 0.0f;
-		//value = 0.3f*pixel->r + 0.59f*pixel->g + 0.11f*pixel->b;
-
-
-
-
-
-
-
-
-}
-}
-*/
-
-
-void manipulate(bitmap_pixel_rgb_t* pixels, int count)
-{
-	float value;
-	for(int i = 0; i < count; i += 1)
-	{
-		bitmap_pixel_rgb_t* pixel = &pixels[i];
-
-		//pixel->r (bitmap_component_t)min((int)pixel->r + 70 ,255);
-		//pixel->g (bitmap_component_t)min((int)pixel->g + 70 ,255);
-		//pixel->b(bitmap_component_t)min((int)pixel->b + 70 ,255);
-
-
-		value = 0.0f;
-		value = 0.3f*pixel->r + 0.59f*pixel->g + 0.11f*pixel->b;
-
-
-
-
+		pixel->v = min(255, max(0 , pixel->v + brightness));
 
 	}
 
@@ -145,8 +68,32 @@ int get_brightness(struct _arguments *arguments)
 
 		return brightness_value;
 	}
+}
 
+void error_check(int error)
+{
+	switch (error)
+	{
+		case BITMAP_ERROR_SUCCESS:
+			break;
 
+		case BITMAP_ERROR_INVALID_PATH:
+			print_red("Invalid Path!");
+			exit(-1);
+
+		case BITMAP_ERROR_INVALID_FILE_FORMAT:
+			print_red("File is not a bitmap!");
+			exit(-1);
+
+		case BITMAP_ERROR_IO:
+			exit(-1);
+
+		case BITMAP_ERROR_MEMORY:
+			exit(-1);
+
+		case BITMAP_ERROR_FILE_EXISTS:
+			exit(-1);
+	}
 }
 
 
@@ -160,32 +107,21 @@ int main(int argc, char** argv)
 	argp_parse(&argp, argc, argv, 0, 0, &arguments);
 
 
-
 	//Read bitmap pixels:
 	bitmap_error_t  error;
-
-	bitmap_pixel_rgb_t* pixels;
-	int width, height;
-
-
-	error = bitmapReadPixels(arguments.input_path, (bitmap_pixel_t**)&pixels, &width, &height, BITMAP_COLOR_SPACE_RGB);
-
-	assert(error == BITMAP_ERROR_SUCCESS);
-
-	printf("Bitmap size: %d x %d\n",width,height);
-
-	//Manipulate bitmap pixels:
-	//manipulate(pixels, width * height);
-	//greyscale(pixels, width * height);
-	//tontrennung(pixels, width * height);
+	bitmap_pixel_hsv_t* pixels;
+	int width, height, brightness;
 
 
 
+	error = bitmapReadPixels(arguments.input_path, (bitmap_pixel_t**)&pixels, &width, &height, BITMAP_COLOR_SPACE_HSV);
+	error_check(error);
+	//assert(error == BITMAP_ERROR_SUCCESS);
 
 
+	brightness = get_brightness(&arguments);
 
-
-	int brightness = get_brightness(&arguments);
+	brightness_change(pixels, width * height, brightness);
 
 
 	// Checks for output sets by user
@@ -206,15 +142,16 @@ int main(int argc, char** argv)
 		.colorDepth = BITMAP_COLOR_DEPTH_24,
 		.compression = BITMAP_COMPRESSION_NONE,
 		.dibHeaderFormat = BITMAP_DIB_HEADER_INFO,
-		.colorSpace = BITMAP_COLOR_SPACE_RGB
+		.colorSpace = BITMAP_COLOR_SPACE_HSV
 
 	};
 
 
 	error = bitmapWritePixels(arguments.output,BITMAP_BOOL_TRUE, &parameters, (bitmap_pixel_t*)pixels);
-	assert(error == BITMAP_ERROR_SUCCESS);
+	error_check(error);
+	//assert(error == BITMAP_ERROR_SUCCESS);
 
-	printf("Bitmap has been writen\n");
+
 
 	//Free the pixel array:
 	free(pixels);
