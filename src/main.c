@@ -4,6 +4,8 @@
 #include <math.h>
 #include <string.h>
 
+#include <pmmintrin.h>
+
 #include "bitmap.h"
 #include "arg_parse.h"
 
@@ -28,27 +30,67 @@ void print_red(const char* input)
 
 
 
-void brightness_change(bitmap_pixel_hsv_t* pixels, int count, int brightness)
+void brightness_change_sse(bitmap_pixel_hsv_t* pixels, int count, float level)
 {
+	float level_negative = (level - fabs(level)) / 2;
+	float level_positive = (level + fabs(level)) / 2;
+	float pixel_max = 255.0f;
 
-	for(int i = 0; i < count; i += 1)
+	float* ptr_ln = &level_negative;
+	float* ptr_lp = &level_positive;
+	float* ptr_pm = &pixel_max;
+
+	float* save_pixel = (float*)malloc(sizeof(float) * 4);
+	float* load_pixel = (float*)malloc(sizeof(float) * 4);
+	
+	__m128 level_negative_sse = _mm_load_ps1(ptr_ln);
+	__m128 level_positive_sse = _mm_load_ps1(ptr_lp);
+	__m128 pixel_max_sse = _mm_load_ps1(ptr_pm);
+
+	
+
+	for(int i = 0; i < count; i++)
 	{
-		bitmap_pixel_hsv_t* pixel = &pixels[i];
+		for(int k = 0; k < 4; k++)
+		{
+			bitmap_pixel_hsv_t *pixel = &pixels[i];
+			load_pixel[k] = pixel->v;
+		}
 
-		pixel->v = min(255, max(0 , pixel->v + brightness));
+		__m128 pixel_sse = _mm_load_ps(load_pixel);
+		__m128 result_1_sse = _mm_mul_ps(pixel_sse, level_negative_sse);
+		__m128 result_2_sse = _mm_sub_ps(pixel_max_sse, pixel_sse);
+		__m128 result_3_sse = _mm_mul_ps(result_2_sse, level_positive_sse);
+		__m128 result_4_sse = _mm_add_ps(result_3_sse, result_1_sse);
+		__m128 result_5_sse = _mm_add_ps(pixel_sse, result_4_sse);
+		_mm_store_ps(save_pixel	, result_5_sse);
+		
+		
 
+		for (int j = 0; j < 4; j++)
+		{
+			bitmap_pixel_hsv_t *pixeld = &pixels[i];
+			pixeld->v = (bitmap_component_t)save_pixel[j];
+			
+		}
 	}
+
+	free(load_pixel);
+	free(save_pixel);
+
 
 }
 
 
+
+
 // Get value from brightness option and return a valid value
-int get_brightness(struct _arguments *arguments)
+float get_brightness(struct _arguments *arguments)
 {
 	if(arguments->brightness_adjust != 0x0)
 	{
 		// Compare string length with position of non numeric value
-		if(strlen(arguments->brightness_adjust) != strspn(arguments->brightness_adjust, "0123456789-+"))
+		if(strlen(arguments->brightness_adjust) != strspn(arguments->brightness_adjust, "0123456789-+."))
 		{
 			print_red("No valid digit!");
 			exit(-1);
@@ -56,20 +98,20 @@ int get_brightness(struct _arguments *arguments)
 
 
 
-		int brightness_value = atoi(arguments->brightness_adjust);
-		printf("Value: %d\n",brightness_value);
+		float brightness_value = (float)atof(arguments->brightness_adjust);
+		printf("Value: %f\n",brightness_value);
 
 		// Checks the brightness range
-		if(brightness_value < -100 || brightness_value > 100 )
+		if(brightness_value < -1.0f || brightness_value > 1.0f )
 		{
-			print_red("Brightness must be -100 to 100!");
+			print_red("Brightness must be -1.0 to 1.0!");
 			exit(-1);
 		}
-
 		return brightness_value;
 	}
 }
 
+// Error Handling
 void error_check(int error)
 {
 	switch (error)
@@ -110,8 +152,8 @@ int main(int argc, char** argv)
 	//Read bitmap pixels:
 	bitmap_error_t  error;
 	bitmap_pixel_hsv_t* pixels;
-	int width, height, brightness;
-
+	int width, height;
+	float brightness;
 
 
 	error = bitmapReadPixels(arguments.input_path, (bitmap_pixel_t**)&pixels, &width, &height, BITMAP_COLOR_SPACE_HSV);
@@ -121,10 +163,10 @@ int main(int argc, char** argv)
 
 	brightness = get_brightness(&arguments);
 
-	brightness_change(pixels, width * height, brightness);
+	brightness_change_sse(pixels, width * height, brightness);
 
 
-	// Checks for output sets by user
+	// Checks for output set by user
 	if(arguments.output == 0x0)
 	{
 		arguments.output = strtok(arguments.input_path, ".");
