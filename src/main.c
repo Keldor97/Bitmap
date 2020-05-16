@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include <pmmintrin.h>
+#include <immintrin.h>
 
 #include "bitmap.h"
 #include "arg_parse.h"
@@ -28,8 +29,14 @@ void print_red(const char* input)
 	printf("\033[0m");
 }
 
+// Checks if specific bit in interger is set
+int is_bit_set(unsigned long num, int bit)
+{
+    return (num >> bit) & 0x01;
+}
 
 
+// Calculates brightness values with SSE
 void brightness_change_sse(bitmap_pixel_hsv_t* pixels, int count, float level)
 {
 	// Vc: Value current
@@ -88,12 +95,98 @@ void brightness_change_sse(bitmap_pixel_hsv_t* pixels, int count, float level)
 
 }
 
+// Calculates brightness values with AVX2
+void brightness_change_avx(bitmap_pixel_hsv_t* pixels, int count, float level)
+{
+	// Vc: Value current
+	// Vn: Value new
+	// Vmax: Maximum of Value
+	// d: Adjust of value
+
+	// Formular: Vn = Vc + (Vc * ((d - |d|) / 2)) + ((Vmax - Vc) * ((d + |d|) / 2))
+
+	
+
+	float level_negative = (level - fabs(level)) / 2;
+	float level_positive = (level + fabs(level)) / 2;
+	float pixel_max = 255.0f;
+
+	float* ptr_ln = &level_negative;
+	float* ptr_lp = &level_positive;
+	float* ptr_pm = &pixel_max;
+
+	float* save_pixel;
+	posix_memalign((void**)&save_pixel, 32, sizeof(float)*8);
+
+	float* load_pixel;
+	posix_memalign((void**)&load_pixel, 32, sizeof(float)*8);
+	
+	
+	__m256 level_negative_avx = _mm256_broadcast_ss(ptr_ln);
+	__m256 level_positive_avx = _mm256_broadcast_ss(ptr_lp);
+	__m256 pixel_max_avx= _mm256_broadcast_ss(ptr_pm);
+
+	
+
+	for(int i = 0; i < count; i++)
+	{
+		 //TODO: Reads also after image!
+		for(int k = 0; k < 8; k++)
+		{
+			bitmap_pixel_hsv_t *pixel = &pixels[i];
+			load_pixel[k] = pixel->v;
+		}
+		
+		__m256 pixel_avx = _mm256_load_ps(load_pixel);
+		__m256 result = _mm256_sub_ps(pixel_max_avx, pixel_avx);
+			   result = _mm256_mul_ps(result, level_positive_avx);
+			   result = _mm256_fmadd_ps(pixel_avx,level_negative_avx, result);
+			   result = _mm256_add_ps(pixel_avx, result);
+ 
+		_mm256_store_ps(save_pixel, result);
+					   
+
+		for (int j = 0; j < 8; j++)
+		{
+			bitmap_pixel_hsv_t *pixeld = &pixels[i];
+			pixeld->v = (bitmap_component_t)save_pixel[j];	
+		}
+	}
+
+	free(load_pixel);
+	free(save_pixel);
+
+
+}
+
+// Checks for AVX2 with assembler and cpuid
+int check_avx2()
+{
+	unsigned long rax, rbx, rcx, rdx;
+
+	__asm__ __volatile__(
+		".intel_syntax noprefix	\n"
+		"mov rax, 7				\n"
+		"mov rcx, 0				\n"
+		"cpuid					\n"
+		".att_syntax prefix		\n"
+		: "=a" (rax), "=b" (rbx), "=c" (rcx), "=d" (rdx)
+	);
+
+	if(is_bit_set(rbx,5) == 1)
+	{
+		return 1;
+	}
+	return 0;
+}
 
 
 
 // Get value from brightness option and return a valid value
 float get_brightness(struct _arguments *arguments)
 {
+	float brightness_value;
+
 	if(arguments->brightness_adjust != 0x0)
 	{
 		// Compare string length with position of non numeric value
@@ -104,9 +197,8 @@ float get_brightness(struct _arguments *arguments)
 		}
 
 
-
-		float brightness_value = (float)atof(arguments->brightness_adjust);
-		printf("Value: %f\n",brightness_value);
+		brightness_value = (float)atof(arguments->brightness_adjust);
+		printf("Value: %.2f\n",brightness_value);
 
 		// Checks the brightness range
 		if(brightness_value < -1.0f || brightness_value > 1.0f )
@@ -114,8 +206,9 @@ float get_brightness(struct _arguments *arguments)
 			print_red("Brightness must be -1.0 to 1.0!");
 			exit(-1);
 		}
-		return brightness_value;
+		
 	}
+	return brightness_value;
 }
 
 // Error Handling
@@ -135,12 +228,15 @@ void error_check(int error)
 			exit(-1);
 
 		case BITMAP_ERROR_IO:
+			print_red("IO Error!");
 			exit(-1);
 
 		case BITMAP_ERROR_MEMORY:
+			print_red("Memory Error!");
 			exit(-1);
 
 		case BITMAP_ERROR_FILE_EXISTS:
+			print_red("File already exists!");
 			exit(-1);
 	}
 }
@@ -165,13 +261,21 @@ int main(int argc, char** argv)
 
 	error = bitmapReadPixels(arguments.input_path, (bitmap_pixel_t**)&pixels, &width, &height, BITMAP_COLOR_SPACE_HSV);
 	error_check(error);
-	//assert(error == BITMAP_ERROR_SUCCESS);
-
+	
 
 	brightness = get_brightness(&arguments);
 
-	brightness_change_sse(pixels, width * height, brightness);
+	// Checks if AVX2 is supported
+	if(check_avx2() == 1){
+		printf("Calculate with AVX2\n");
+		brightness_change_avx(pixels, width * height, brightness);
+	}
+	else{
+		printf("AVX2 not supported, use instead SSE\n");
+		brightness_change_sse(pixels, width * height, brightness);
+	}
 
+	
 
 	// Checks for output set by user
 	if(arguments.output == 0x0)
@@ -198,7 +302,7 @@ int main(int argc, char** argv)
 
 	error = bitmapWritePixels(arguments.output,BITMAP_BOOL_TRUE, &parameters, (bitmap_pixel_t*)pixels);
 	error_check(error);
-	//assert(error == BITMAP_ERROR_SUCCESS);
+	
 
 
 
