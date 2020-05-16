@@ -1,4 +1,4 @@
 # Bitmap
 
-Usage:  ./bitmap --usage
+Usage:  ./bitmap --usage<br />
         ./bitmap FILE -b VALUE -o OUTPUT
