@@ -32,6 +32,13 @@ void print_red(const char* input)
 
 void brightness_change_sse(bitmap_pixel_hsv_t* pixels, int count, float level)
 {
+	// Vc: Value current
+	// Vn: Value new
+	// Vmax: Maximum of Value
+	// d: Adjust of value
+
+	// Formular: Vn = Vc + (Vc * ((d - |d|) / 2)) + ((Vmax - Vc) * ((d + |d|) / 2))
+
 	float level_negative = (level - fabs(level)) / 2;
 	float level_positive = (level + fabs(level)) / 2;
 	float pixel_max = 255.0f;
@@ -60,10 +67,10 @@ void brightness_change_sse(bitmap_pixel_hsv_t* pixels, int count, float level)
 		__m128 pixel_sse = _mm_load_ps(load_pixel);
 		__m128 result_1_sse = _mm_mul_ps(pixel_sse, level_negative_sse);
 		__m128 result_2_sse = _mm_sub_ps(pixel_max_sse, pixel_sse);
-		__m128 result_3_sse = _mm_mul_ps(result_2_sse, level_positive_sse);
-		__m128 result_4_sse = _mm_add_ps(result_3_sse, result_1_sse);
-		__m128 result_5_sse = _mm_add_ps(pixel_sse, result_4_sse);
-		_mm_store_ps(save_pixel	, result_5_sse);
+		 	   result_2_sse = _mm_mul_ps(result_2_sse, level_positive_sse);
+			   result_2_sse = _mm_add_ps(result_2_sse, result_1_sse);
+			   result_2_sse = _mm_add_ps(pixel_sse, result_2_sse);
+		_mm_store_ps(save_pixel	, result_2_sse);
 		
 		
 
