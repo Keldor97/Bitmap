@@ -268,14 +268,14 @@ int main(int argc, char** argv)
 	brightness = get_brightness(&arguments);
 
 	// Checks if AVX2 is supported
-	// if(check_avx2() == 1){
-	// 	printf("Calculate with AVX2\n");
-	// 	brightness_change_avx(pixels, width * height, brightness);
-	// }
-	// else{
-	// 	printf("AVX2 not supported, use instead SSE\n");
+	if(check_avx2() == 1){
+		printf("Calculate with AVX2\n");
+		brightness_change_avx(pixels, width * height, brightness);
+	}
+	else{
+		printf("AVX2 not supported, use instead SSE\n");
 		brightness_change_sse(pixels, width * height, brightness);
-	// }
+	}
 
 	
 
