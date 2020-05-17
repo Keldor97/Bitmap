@@ -63,12 +63,12 @@ void brightness_change_sse(bitmap_pixel_hsv_t* pixels, int count, float level)
 
 	
 
-	for(int i = 0; i < count; i++)
+	for(int i = 0; i < count/4; i++)
 	{
-		for(int k = 0; k < 4; k++)
+		for(int k = i*4; k < i*4+4; k++)
 		{
-			bitmap_pixel_hsv_t *pixel = &pixels[i];
-			load_pixel[k] = pixel->v;
+			bitmap_pixel_hsv_t *pixel = &pixels[k];
+			load_pixel[k-4*i] = pixel->v;
 		}
 
 		__m128 pixel_sse = _mm_load_ps(load_pixel);
@@ -81,10 +81,10 @@ void brightness_change_sse(bitmap_pixel_hsv_t* pixels, int count, float level)
 		
 		
 
-		for (int j = 0; j < 4; j++)
+		for (int j = i*4; j < i*4+4; j++)
 		{
-			bitmap_pixel_hsv_t *pixeld = &pixels[i];
-			pixeld->v = (bitmap_component_t)save_pixel[j];
+			bitmap_pixel_hsv_t *pixeld = &pixels[j];
+			pixeld->v = (bitmap_component_t)save_pixel[j-4*i];
 			
 		}
 	}
@@ -128,15 +128,17 @@ void brightness_change_avx(bitmap_pixel_hsv_t* pixels, int count, float level)
 
 	
 
-	for(int i = 0; i < count; i++)
+	for(int i = 0; i < count/8; i++)
 	{
-		 //TODO: Reads also after image!
-		for(int k = 0; k < 8; k++)
-		{
-			bitmap_pixel_hsv_t *pixel = &pixels[i];
-			load_pixel[k] = pixel->v;
-		}
 		
+		for(int k = i*8; k < i*8+8  ; k++)
+		{
+			bitmap_pixel_hsv_t *pixel = &pixels[k];
+			load_pixel[k-8*i] = pixel->v;
+			
+			
+		}
+		 
 		__m256 pixel_avx = _mm256_load_ps(load_pixel);
 		__m256 result = _mm256_sub_ps(pixel_max_avx, pixel_avx);
 			   result = _mm256_mul_ps(result, level_positive_avx);
@@ -146,10 +148,10 @@ void brightness_change_avx(bitmap_pixel_hsv_t* pixels, int count, float level)
 		_mm256_store_ps(save_pixel, result);
 					   
 
-		for (int j = 0; j < 8; j++)
+		for (int j = i*8; j < i*8+8; j++)
 		{
-			bitmap_pixel_hsv_t *pixeld = &pixels[i];
-			pixeld->v = (bitmap_component_t)save_pixel[j];	
+			bitmap_pixel_hsv_t *pixeld = &pixels[j];
+			pixeld->v = (bitmap_component_t)save_pixel[j-8*i];				
 		}
 	}
 
@@ -266,14 +268,14 @@ int main(int argc, char** argv)
 	brightness = get_brightness(&arguments);
 
 	// Checks if AVX2 is supported
-	if(check_avx2() == 1){
-		printf("Calculate with AVX2\n");
-		brightness_change_avx(pixels, width * height, brightness);
-	}
-	else{
-		printf("AVX2 not supported, use instead SSE\n");
+	// if(check_avx2() == 1){
+	// 	printf("Calculate with AVX2\n");
+	// 	brightness_change_avx(pixels, width * height, brightness);
+	// }
+	// else{
+	// 	printf("AVX2 not supported, use instead SSE\n");
 		brightness_change_sse(pixels, width * height, brightness);
-	}
+	// }
 
 	
 
