@@ -20,8 +20,7 @@ int max(int a, int b)
 	return (a > b) ? a : b;
 }
 
-
-
+// Prints red text on command line
 void print_red(const char* input)
 {
 	printf("\033[1;31m");
@@ -46,8 +45,10 @@ void brightness_change_sse(bitmap_pixel_hsv_t* pixels, int count, float level)
 
 	// Formular: Vn = Vc + (Vc * ((d - |d|) / 2)) + ((Vmax - Vc) * ((d + |d|) / 2))
 
+	// Ramp Function for 'd' and '-d'
 	float level_negative = (level - fabs(level)) / 2;
 	float level_positive = (level + fabs(level)) / 2;
+
 	float pixel_max = 255.0f;
 
 	float* ptr_ln = &level_negative;
@@ -61,7 +62,6 @@ void brightness_change_sse(bitmap_pixel_hsv_t* pixels, int count, float level)
 	__m128 level_positive_sse = _mm_load_ps1(ptr_lp);
 	__m128 pixel_max_sse = _mm_load_ps1(ptr_pm);
 
-	
 
 	for(int i = 0; i < count/4; i++)
 	{
@@ -74,25 +74,20 @@ void brightness_change_sse(bitmap_pixel_hsv_t* pixels, int count, float level)
 		__m128 pixel_sse = _mm_load_ps(load_pixel);
 		__m128 result_1_sse = _mm_mul_ps(pixel_sse, level_negative_sse);
 		__m128 result_2_sse = _mm_sub_ps(pixel_max_sse, pixel_sse);
-		 	   result_2_sse = _mm_mul_ps(result_2_sse, level_positive_sse);
-			   result_2_sse = _mm_add_ps(result_2_sse, result_1_sse);
-			   result_2_sse = _mm_add_ps(pixel_sse, result_2_sse);
+		result_2_sse = _mm_mul_ps(result_2_sse, level_positive_sse);
+		result_2_sse = _mm_add_ps(result_2_sse, result_1_sse);
+		result_2_sse = _mm_add_ps(pixel_sse, result_2_sse);
 		_mm_store_ps(save_pixel	, result_2_sse);
 		
-		
-
 		for (int j = i*4; j < i*4+4; j++)
 		{
 			bitmap_pixel_hsv_t *pixeld = &pixels[j];
-			pixeld->v = (bitmap_component_t)save_pixel[j-4*i];
-			
+			pixeld->v = (bitmap_component_t)save_pixel[j-4*i];	
 		}
 	}
 
 	free(load_pixel);
 	free(save_pixel);
-
-
 }
 
 // Calculates brightness values with AVX2
@@ -105,10 +100,10 @@ void brightness_change_avx(bitmap_pixel_hsv_t* pixels, int count, float level)
 
 	// Formular: Vn = Vc + (Vc * ((d - |d|) / 2)) + ((Vmax - Vc) * ((d + |d|) / 2))
 
-	
-
+	// Ramp Function for 'd' and '-d'
 	float level_negative = (level - fabs(level)) / 2;
 	float level_positive = (level + fabs(level)) / 2;
+
 	float pixel_max = 255.0f;
 
 	float* ptr_ln = &level_negative;
@@ -126,28 +121,22 @@ void brightness_change_avx(bitmap_pixel_hsv_t* pixels, int count, float level)
 	__m256 level_positive_avx = _mm256_broadcast_ss(ptr_lp);
 	__m256 pixel_max_avx= _mm256_broadcast_ss(ptr_pm);
 
-	
 
 	for(int i = 0; i < count/8; i++)
 	{
-		
 		for(int k = i*8; k < i*8+8  ; k++)
 		{
 			bitmap_pixel_hsv_t *pixel = &pixels[k];
-			load_pixel[k-8*i] = pixel->v;
-			
-			
+			load_pixel[k-8*i] = pixel->v;			
 		}
 		 
 		__m256 pixel_avx = _mm256_load_ps(load_pixel);
 		__m256 result = _mm256_sub_ps(pixel_max_avx, pixel_avx);
-			   result = _mm256_mul_ps(result, level_positive_avx);
-			   result = _mm256_fmadd_ps(pixel_avx,level_negative_avx, result);
-			   result = _mm256_add_ps(pixel_avx, result);
- 
-		_mm256_store_ps(save_pixel, result);
+		result = _mm256_mul_ps(result, level_positive_avx);
+		result = _mm256_fmadd_ps(pixel_avx,level_negative_avx, result);
+		result = _mm256_add_ps(pixel_avx, result);
+ 		_mm256_store_ps(save_pixel, result);
 					   
-
 		for (int j = i*8; j < i*8+8; j++)
 		{
 			bitmap_pixel_hsv_t *pixeld = &pixels[j];
@@ -157,8 +146,6 @@ void brightness_change_avx(bitmap_pixel_hsv_t* pixels, int count, float level)
 
 	free(load_pixel);
 	free(save_pixel);
-
-
 }
 
 // Checks for AVX2 with assembler and cpuid
@@ -198,17 +185,15 @@ float get_brightness(struct _arguments *arguments)
 			exit(-1);
 		}
 
-
 		brightness_value = (float)atof(arguments->brightness_adjust);
 		printf("Value: %.2f\n",brightness_value);
 
 		// Checks the brightness range
 		if(brightness_value < -1.0f || brightness_value > 1.0f )
 		{
-			print_red("Brightness must be -1.0 to 1.0!");
+			print_red("Brightness must be between -1.0 and 1.0!");
 			exit(-1);
 		}
-		
 	}
 	return brightness_value;
 }
@@ -263,6 +248,8 @@ int main(int argc, char** argv)
 
 	error = bitmapReadPixels(arguments.input_path, (bitmap_pixel_t**)&pixels, &width, &height, BITMAP_COLOR_SPACE_HSV);
 	error_check(error);
+	if(error == BITMAP_ERROR_SUCCESS)
+		printf("Bitmap was read successfully\n");
 	
 
 	brightness = get_brightness(&arguments);
@@ -301,12 +288,12 @@ int main(int argc, char** argv)
 
 	};
 
-
-	error = bitmapWritePixels(arguments.output,BITMAP_BOOL_TRUE, &parameters, (bitmap_pixel_t*)pixels);
-	error_check(error);
 	
-
-
+	error = bitmapWritePixels(arguments.output, BITMAP_BOOL_TRUE, &parameters, (bitmap_pixel_t*)pixels);
+	error_check(error);
+	if(error == BITMAP_ERROR_SUCCESS)
+		printf("Bitmap was written successfully\n");
+	
 
 	//Free the pixel array:
 	free(pixels);
