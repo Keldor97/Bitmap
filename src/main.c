@@ -195,6 +195,11 @@ float get_brightness(struct _arguments *arguments)
 			exit(-1);
 		}
 	}
+	else if(arguments->brightness_adjust == 0x0)
+	{
+		print_red("Please enter a value, with option -b!");
+		exit(-1);
+	}
 	return brightness_value;
 }
 
